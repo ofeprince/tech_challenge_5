@@ -1,0 +1,18 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv
+
+# Personal
+src/tech_challenge_5/references/
+
+# Data (baixado do Kaggle, não versionar)
+data/*
+!data/raw/.gitkeep
+!data/processed/.gitkeep
