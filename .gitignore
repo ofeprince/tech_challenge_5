@@ -10,7 +10,7 @@ wheels/
 .venv
 
 # Personal
-src/tech_challenge_5/references/
+references/
 
 # Data (baixado do Kaggle, não versionar)
 data/*
