@@ -97,6 +97,48 @@ class ThompsonSamplingBandit:
             beta += 1
         self._params[(segment, arm)] = [alpha, beta]
 
+    @classmethod
+    def fit(
+        cls,
+        df: pd.DataFrame,
+        arms: list[str],
+        segment_col: str,
+        arm_col: str,
+        reward_col: str,
+        prior_alpha: float = 1.0,
+        prior_beta: float = 1.0,
+        rng: np.random.Generator | None = None,
+    ) -> "ThompsonSamplingBandit":
+        """Ajusta a posterior direto sobre dados logados completos, sem replay.
+
+        `replay_evaluate` descarta rodadas em que o braço escolhido pela
+        política não bate com o braço logado — isso é necessário para medir
+        performance online sem viés (Etapa 3). Mas para *servir* recomendações
+        (Etapa 4/5) queremos o melhor estado possível da posterior, e cada
+        linha do histórico já nos diz qual braço foi mostrado e qual foi o
+        resultado: não há nada a "explorar" quando os dados já existem todos
+        de uma vez, então cada linha atualiza diretamente o par
+        (segmento, braço) correspondente.
+        """
+        bandit = cls(
+            arms=arms,
+            segment_col=segment_col,
+            prior_alpha=prior_alpha,
+            prior_beta=prior_beta,
+            rng=rng if rng is not None else np.random.default_rng(),
+        )
+        counts = (
+            df.groupby([segment_col, arm_col])[reward_col]
+            .agg(successes="sum", n="count")
+            .reset_index()
+        )
+        for _, row in counts.iterrows():
+            successes = int(row["successes"])
+            n = int(row["n"])
+            key = (str(row[segment_col]), str(row[arm_col]))
+            bandit._params[key] = [prior_alpha + successes, prior_beta + (n - successes)]
+        return bandit
+
     def posterior_summary(self) -> pd.DataFrame:
         """Média posterior (taxa de conversão estimada) por segmento x braço."""
         rows = [
