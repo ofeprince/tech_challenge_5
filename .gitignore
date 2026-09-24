@@ -16,3 +16,8 @@ references/
 data/*
 !data/raw/.gitkeep
 !data/processed/.gitkeep
+
+# MLflow (tracking local, etapa 7)
+mlruns/
+mlartifacts/
+mlflow.db

@@ -49,6 +49,10 @@ src/tech_challenge_5/
 data/
   raw/                        # CSV baixado do Kaggle (não versionado)
   processed/                  # base tratada + encoder (gerados localmente)
+mlflow.db                     # Etapa 7 — tracking store (SQLite, gerado localmente, não versionado)
+mlruns/                       # Etapa 7 — artifacts das runs (gerado localmente, não versionado)
+examples/
+  recommend_request.json      # payload de exemplo para POST /recommend (demo/vídeo pitch)
 ```
 
 ## Instalação
@@ -79,7 +83,23 @@ uv run jupyter lab
 
 Abra e execute `00_eda.ipynb` → `01_feature_engineering.ipynb` → `02_baseline_bandit.ipynb` → `03_golden_set.ipynb`.
 
-**3. Subir a API** (Etapa 5 — serviço demonstrável):
+A execução de `02_baseline_bandit.ipynb` também registra os parâmetros/métricas do baseline e do Thompson Sampling no MLflow (Etapa 7, seção 10 do notebook), local, sem servidor.
+
+**3. Usar o tracking do MLflow** (Etapa 7 — depois de rodar `02_baseline_bandit.ipynb` ao menos uma vez):
+
+```bash
+uv run mlflow ui --backend-store-uri sqlite:///mlflow.db
+```
+
+Acesse `http://127.0.0.1:5000`. O que dá pra explorar lá:
+
+- **Lista de runs**: o experimento `datathon-canal-contato` (menu à esquerda) mostra as runs `baseline` e `thompson_sampling` numa tabela — dá pra adicionar colunas de métrica (`conversao_final`, `conversao_media`, `win_rate`, `lift`, `oracle_reward`) clicando no seletor de colunas.
+- **Comparar runs**: marque o checkbox das duas runs e use a opção de comparação — mostra parâmetros e métricas lado a lado (útil para o vídeo: baseline sem parâmetro nenhum de aprendizado vs. Thompson Sampling com `segment_col`, `prior_alpha`, `prior_beta`, `n_seeds`).
+- **Abrir a run `thompson_sampling`**: parâmetros e métricas finais ficam na visão geral da run; a métrica `conversao_final_por_seed` foi logada por `step` (0 a 29) — abrindo o gráfico dela dá pra ver a distribuição das 30 execuções que sustentam a conclusão "TS supera o baseline na maioria das rodadas".
+- **Aba de artifacts**: os dois gráficos gerados no notebook (`conversao_acumulada.png`, `baseline_vs_thompson_sampling.png`) ficam renderizados ali, junto com `tabelas/comparison.json` e `tabelas/oracle_table.json` (tabela posterior aprendida vs. conversão histórica, navegável na própria UI).
+- **Reprodutibilidade**: cada vez que `02_baseline_bandit.ipynb` é executado de novo, duas runs novas são criadas (nada é sobrescrito) — a UI acumula o histórico de execuções, do mesmo jeito que aconteceria com retreinos periódicos em produção.
+
+**4. Subir a API** (Etapa 5 — serviço demonstrável):
 
 ```bash
 uv run uvicorn tech_challenge_5.api:app --reload
@@ -106,6 +126,20 @@ Resposta:
 {"recommended_offer":"telephone","estimated_conversion":{"cellular":0.0998,"telephone":0.1194},"best_historical_offer":"telephone"}
 ```
 
+Também há um payload pronto em `examples/recommend_request.json` (cliente em `ago`, outro mês de crossover), útil para demo/vídeo:
+
+```bash
+curl -X POST http://127.0.0.1:8000/recommend \
+  -H "Content-Type: application/json" \
+  -d @examples/recommend_request.json
+```
+
+Resposta:
+
+```json
+{"recommended_offer":"telephone","estimated_conversion":{"cellular":0.1049,"telephone":0.1365},"best_historical_offer":"telephone"}
+```
+
 ## Resultados
 
 Avaliação via replay, 30 execuções (seeds) diferentes (`notebooks/02_baseline_bandit.ipynb`):
@@ -113,10 +147,14 @@ Avaliação via replay, 30 execuções (seeds) diferentes (`notebooks/02_baselin
 | Política | Conversão | Observação |
 |---|---|---|
 | Baseline (sempre `cellular`) | 14,74% | regra fixa, não aprende |
-| Thompson Sampling (contexto: mês) | 15,19% ± 0,51% | supera o baseline em 80% das 30 execuções, lift médio de **+3,1%** |
+| Thompson Sampling (contexto: mês) | 15,36% ± 0,52% | supera o baseline em 83% das 30 execuções, lift médio de **+4,2%** |
 | Oráculo (melhor braço por mês, teto teórico) | 18,04% | referência inatingível — exige conhecer o melhor braço sem aprender |
 
+(A amostragem da Beta no Thompson Sampling não é fixada por seed — os números variam levemente a cada execução do notebook; a ordem de grandeza e a conclusão, TS supera o baseline na maioria das execuções, se mantêm.)
+
 **Golden Set** (`notebooks/03_golden_set.ipynb`) — 5 clientes reais, cobrindo os meses de crossover (`abr`, `ago`, `nov`) e os meses do padrão dominante (`mai`, `jul`): em todos os 5 casos, a recomendação do bandit final concordou com o melhor canal histórico real daquele mês.
+
+Esses parâmetros e métricas (baseline e Thompson Sampling) também ficam registrados no MLflow (Etapa 7) — ver [Ciclo de vida MLOps](#ciclo-de-vida-mlops).
 
 ## Arquitetura-alvo em nuvem (Azure)
 
@@ -166,7 +204,9 @@ flowchart TB
 
 ## Ciclo de vida MLOps
 
-Localmente, os parâmetros do bandit e as métricas da Etapa 3 (baseline vs. Thompson Sampling) ainda **não estão registrados via MLflow** — próximo passo do projeto. No desenho em nuvem acima, esse registro é feito pelo MLflow nativo do workspace do Azure ML, que também versiona o modelo publicado (Model Registry), evitando duplicar essa responsabilidade em uma ferramenta separada.
+Localmente (Etapa 7), `02_baseline_bandit.ipynb` registra no MLflow — tracking store SQLite (`mlflow.db`), artifacts em `mlruns/`, ambos locais e não versionados — uma run `baseline` (braço fixo, conversão final) e uma run `thompson_sampling` (segmento de contexto, priors, conversão média/desvio/win-rate/lift sobre 30 seeds, oráculo, os dois gráficos comparativos e as tabelas posterior-vs-histórico como artifacts). Ver `uv run mlflow ui --backend-store-uri sqlite:///mlflow.db` em [Como executar](#como-executar).
+
+No desenho em nuvem acima, esse mesmo registro passa a ser feito pelo MLflow nativo do workspace do Azure ML, que também versiona o modelo publicado (Model Registry) — a mesma responsabilidade, sem precisar hospedar um servidor MLflow à parte.
 
 ## Limitações conhecidas
 
@@ -183,5 +223,5 @@ Localmente, os parâmetros do bandit e as métricas da Etapa 3 (baseline vs. Tho
 - [x] Etapa 4 — Golden Set de 5 clientes (`03_golden_set.ipynb`)
 - [x] Etapa 5 — Serviço demonstrável (`api.py`, FastAPI)
 - [x] Etapa 6 — Arquitetura-alvo em nuvem (esta seção)
-- [ ] Etapa 7 — Tracking via MLflow (pendente)
-- [ ] Etapa 8 — Vídeo pitch (pendente)
+- [x] Etapa 7 — Tracking via MLflow (`mlflow.db` + `mlruns/`, seção 10 de `02_baseline_bandit.ipynb`)
+- [x] Etapa 8 — Vídeo pitch (pendente)

@@ -1,0 +1,19 @@
+{
+  "age": 45,
+  "campaign": 2,
+  "previous": 1,
+  "emp_var_rate": 1.4,
+  "cons_price_idx": 93.444,
+  "cons_conf_idx": -36.1,
+  "euribor3m": 4.964,
+  "nr_employed": 5228.1,
+  "job": "technician",
+  "marital": "married",
+  "education": "university.degree",
+  "default": "no",
+  "housing": "yes",
+  "loan": "no",
+  "month": "aug",
+  "poutcome": "success",
+  "nunca_contatado": false
+}
