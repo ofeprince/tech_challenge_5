@@ -78,8 +78,10 @@ uv run python -m tech_challenge_5.features
 **2. Rodar os notebooks**, na ordem, para reproduzir EDA → preparação → baseline/bandit → golden set:
 
 ```bash
-uv run jupyter lab
+uv run python -m jupyterlab
 ```
+
+> Se `uv run jupyter lab` (ou qualquer outro comando que chame diretamente um `.exe` da `.venv/Scripts/`, como `uv run mlflow` ou `uv run uvicorn`) der erro de **Application Control Policy** bloqueando o executável, troque pela forma `uv run python -m <módulo>` — todos os comandos abaixo já estão nesse formato por causa disso.
 
 Abra e execute `00_eda.ipynb` → `01_feature_engineering.ipynb` → `02_baseline_bandit.ipynb` → `03_golden_set.ipynb`.
 
@@ -88,7 +90,7 @@ A execução de `02_baseline_bandit.ipynb` também registra os parâmetros/métr
 **3. Usar o tracking do MLflow** (Etapa 7 — depois de rodar `02_baseline_bandit.ipynb` ao menos uma vez):
 
 ```bash
-uv run mlflow ui --backend-store-uri sqlite:///mlflow.db
+uv run python -m mlflow ui --backend-store-uri sqlite:///mlflow.db
 ```
 
 Acesse `http://127.0.0.1:5000`. O que dá pra explorar lá:
@@ -102,7 +104,7 @@ Acesse `http://127.0.0.1:5000`. O que dá pra explorar lá:
 **4. Subir a API** (Etapa 5 — serviço demonstrável):
 
 ```bash
-uv run uvicorn tech_challenge_5.api:app --reload
+uv run python -m uvicorn tech_challenge_5.api:app --reload
 ```
 
 Acesse `http://127.0.0.1:8000/docs` (Swagger, gerado automaticamente) para testar `POST /recommend` direto do navegador, com validação e exemplos preenchidos para cada campo. Exemplo via `curl`:
@@ -204,7 +206,7 @@ flowchart TB
 
 ## Ciclo de vida MLOps
 
-Localmente (Etapa 7), `02_baseline_bandit.ipynb` registra no MLflow — tracking store SQLite (`mlflow.db`), artifacts em `mlruns/`, ambos locais e não versionados — uma run `baseline` (braço fixo, conversão final) e uma run `thompson_sampling` (segmento de contexto, priors, conversão média/desvio/win-rate/lift sobre 30 seeds, oráculo, os dois gráficos comparativos e as tabelas posterior-vs-histórico como artifacts). Ver `uv run mlflow ui --backend-store-uri sqlite:///mlflow.db` em [Como executar](#como-executar).
+Localmente (Etapa 7), `02_baseline_bandit.ipynb` registra no MLflow — tracking store SQLite (`mlflow.db`), artifacts em `mlruns/`, ambos locais e não versionados — uma run `baseline` (braço fixo, conversão final) e uma run `thompson_sampling` (segmento de contexto, priors, conversão média/desvio/win-rate/lift sobre 30 seeds, oráculo, os dois gráficos comparativos e as tabelas posterior-vs-histórico como artifacts). Ver `uv run python -m mlflow ui --backend-store-uri sqlite:///mlflow.db` em [Como executar](#como-executar).
 
 No desenho em nuvem acima, esse mesmo registro passa a ser feito pelo MLflow nativo do workspace do Azure ML, que também versiona o modelo publicado (Model Registry) — a mesma responsabilidade, sem precisar hospedar um servidor MLflow à parte.
 
